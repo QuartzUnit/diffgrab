@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "diffgrab"
+version = "0.1.0"
+description = "Web page change tracking with structured diffs — markgrab + snapgrab integration, MCP native."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "QuartzUnit" }]
+keywords = ["web", "diff", "change-detection", "monitoring", "mcp", "markgrab"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = ["markgrab>=0.1.2", "httpx>=0.28"]
+
+[project.optional-dependencies]
+visual = ["snapgrab>=0.1.0"]
+mcp = ["fastmcp>=2.0"]
+cli = ["click>=8.0", "rich>=13.0"]
+all = ["diffgrab[visual,mcp,cli]"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
+
+[project.urls]
+Homepage = "https://github.com/QuartzUnit/diffgrab"
+Repository = "https://github.com/QuartzUnit/diffgrab"
+
+[project.scripts]
+diffgrab = "diffgrab.__main__:main"
+diffgrab-mcp = "diffgrab.mcp_server:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
