@@ -4,6 +4,8 @@
 [![Python](https://img.shields.io/pypi/pyversions/diffgrab)](https://pypi.org/project/diffgrab/)
 [![License](https://img.shields.io/github/license/QuartzUnit/diffgrab)](https://github.com/QuartzUnit/diffgrab/blob/main/LICENSE)
 
+> [한국어 문서](README.ko.md)
+
 > Web page change tracking with structured diffs. markgrab + snapgrab integration, MCP native.
 
 ```python
@@ -196,4 +198,4 @@ tracker = DiffTracker(db_path="/path/to/custom.db")
 
 [MIT](LICENSE)
 
-<!-- mcp-name: io.github.ArkNill/diffgrab -->
+<!-- mcp-name: io.github.QuartzUnit/diffgrab -->
