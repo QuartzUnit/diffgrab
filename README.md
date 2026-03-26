@@ -194,6 +194,11 @@ tracker = DiffTracker(db_path="/path/to/custom.db")
 | **diffgrab** | **Web page change tracking** | `pip install diffgrab` |
 | [browsegrab](https://github.com/QuartzUnit/browsegrab) | Browser agent for LLMs | Coming soon |
 
+## Used in
+
+- [newswatch](https://github.com/QuartzUnit/newswatch) — RSS news monitoring pipeline (feedkit → markgrab → embgrep → diffgrab)
+- [watchdeck](https://github.com/QuartzUnit/watchdeck) — Web page monitoring with visual diffs and safety guards
+
 ## License
 
 [MIT](LICENSE)
