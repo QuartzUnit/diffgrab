@@ -32,6 +32,20 @@ await tracker.close()
 - **MCP 서버** — Claude Code / MCP 클라이언트용 5개 도구
 - **CLI 내장** — `diffgrab track`, `check`, `diff`, `history`, `untrack`
 
+## 동작 원리
+
+```mermaid
+flowchart TD
+    A["diffgrab track URL"] --> B["초기 스냅샷 촬영\n(markgrab + snapgrab)"]
+    B --> C["기준선 저장"]
+    C --> D["diffgrab check"]
+    D --> E["현재 페이지 가져오기"]
+    E --> F{"콘텐츠\n해시 일치?"}
+    F -->|"변경됨"| G["구조화된 diff 계산\n+ 섹션 분석"]
+    F -->|"변경 없음"| H["변경 없음"]
+    G --> I["📊 DiffResult\n추가 / 삭제 / 수정"]
+```
+
 ## 설치
 
 ```bash

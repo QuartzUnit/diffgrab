@@ -32,6 +32,20 @@ await tracker.close()
 - **MCP server** — 5 tools for Claude Code / MCP clients
 - **CLI included** — `diffgrab track`, `check`, `diff`, `history`, `untrack`
 
+## How It Works
+
+```mermaid
+flowchart TD
+    A["diffgrab track URL"] --> B["Fetch initial snapshot\n(markgrab + snapgrab)"]
+    B --> C["Store baseline"]
+    C --> D["diffgrab check"]
+    D --> E["Fetch current page"]
+    E --> F{"Content\nhash match?"}
+    F -->|"changed"| G["Compute structured diff\n+ section analysis"]
+    F -->|"unchanged"| H["No changes"]
+    G --> I["📊 DiffResult\nadded / removed / modified"]
+```
+
 ## Install
 
 ```bash
