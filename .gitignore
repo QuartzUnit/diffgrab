@@ -8,5 +8,6 @@ build/
 .ruff_cache/
 .env
 .env.local
+.mcpregistry_*
 CLAUDE.md
 PLAN.txt
