@@ -1,59 +1,16 @@
 # diffgrab
-
-> Web page change tracking with structured diffs — markgrab + snapgrab integration, MCP native.
-
-## Purpose
-
-diffgrab monitors web pages for content changes over time. It fetches page content via markgrab, stores snapshots in a local SQLite database, and produces structured diffs with line-level additions/removals and section-level change detection. Optional snapgrab integration provides visual screenshot diffs.
-
-## Capabilities
-
-- **URL tracking**: Register URLs with configurable check intervals for periodic monitoring
-- **Change detection**: Compare current page content against stored snapshots
-- **Structured diffs**: Unified diff output with added/removed line counts and changed section names
-- **Snapshot history**: Browse and compare any two historical snapshots of a tracked URL
-- **MCP server**: 5 change tracking tools exposed via FastMCP (stdio transport)
-
-## Installation
-
-```
-pip install diffgrab          # core (markgrab + httpx)
-pip install diffgrab[cli]     # CLI (click + rich)
-pip install diffgrab[mcp]     # MCP server (fastmcp)
-pip install diffgrab[visual]  # visual diffs (snapgrab)
-pip install diffgrab[all]     # everything
-```
-
-## Quick Use
-
-### CLI
-
-```bash
-diffgrab track https://example.com              # register URL for tracking
-diffgrab check                                   # check all tracked URLs for changes
-diffgrab diff https://example.com                # show structured diff
-diffgrab history https://example.com             # show snapshot history
-diffgrab untrack https://example.com             # stop tracking
-```
-
-### Python
-
+> Web page change tracking with structured diffs -- markgrab + snapgrab, MCP native.
+`pip install diffgrab` / `diffgrab[cli]` / `diffgrab[mcp]` / `diffgrab[visual]` / `diffgrab[all]`
+## Features
+Track URLs, detect changes via SHA-256, unified diffs with section analysis, snapshot history (SQLite), visual pixel diffs (optional), MCP server (5 tools, stdio).
+## Exports
+`track`, `check`, `diff`, `history`, `untrack` (async convenience fns), `DiffTracker` (class), `DiffResult` (dataclass)
+## Example
 ```python
-import asyncio
 from diffgrab import track, check, diff
-
-asyncio.run(track("https://example.com", interval_hours=12))
-results = asyncio.run(check())  # list[DiffResult]
-d = asyncio.run(diff("https://example.com"))  # DiffResult with .unified_diff, .changed_sections
+await track("https://example.com", interval_hours=12)
+results = await check()  # list[DiffResult]
+d = await diff("https://example.com")  # .unified_diff, .changed_sections
 ```
-
-### MCP
-
-Server: `diffgrab-mcp` (stdio transport)
-Tools: `track_url`, `check_changes`, `get_diff`, `get_history`, `untrack_url`
-
 ## Links
-
-- Docs: https://github.com/QuartzUnit/diffgrab
-- PyPI: https://pypi.org/project/diffgrab/
-- Source: https://github.com/QuartzUnit/diffgrab
+- [GitHub](https://github.com/QuartzUnit/diffgrab) | [PyPI](https://pypi.org/project/diffgrab/) | [Full API](/llms-full.txt)

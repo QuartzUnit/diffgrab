@@ -1,623 +1,119 @@
 # diffgrab
-
-> Web page change tracking with structured diffs — markgrab + snapgrab integration, MCP native.
-
-## Purpose
-
-diffgrab monitors web pages for content changes over time. It fetches page content via markgrab, stores snapshots in a local SQLite database, and produces structured diffs with line-level additions/removals and section-level change detection. Optional snapgrab integration provides visual screenshot diffs. Designed as a zero-config CLI tool, async Python library, and MCP server for AI agent workflows.
-
-## Capabilities
-
-- **URL tracking**: Register URLs with configurable check intervals for periodic monitoring
-- **Change detection**: Compare current page content against stored snapshots using SHA-256 content hashing
-- **Structured diffs**: Unified diff output with added/removed line counts and changed section names
-- **Section-level analysis**: Automatically identifies which markdown heading sections contain changes
-- **Snapshot history**: Browse and compare any two historical snapshots of a tracked URL
-- **Visual diffs**: Optional pixel-by-pixel screenshot comparison via snapgrab + Pillow
-- **MCP server**: 5 change tracking tools exposed via FastMCP (stdio transport)
-- **SQLite storage**: WAL-mode database with automatic schema initialization at `~/.local/share/diffgrab/diffgrab.db`
-
-## Installation
-
+> Web page change tracking with structured diffs -- markgrab + snapgrab, MCP native.
+## Install
 ```
 pip install diffgrab          # core (markgrab + httpx)
-pip install diffgrab[cli]     # CLI (click + rich)
-pip install diffgrab[mcp]     # MCP server (fastmcp)
-pip install diffgrab[visual]  # visual diffs (snapgrab)
-pip install diffgrab[all]     # everything
+pip install diffgrab[cli|mcp|visual|all]
 ```
-
-Requirements: Python >= 3.11
-
-Core dependencies: markgrab >= 0.1.2, httpx >= 0.28
-
-## Quick Use
-
-### CLI
-
-```bash
-diffgrab track https://example.com              # register URL for tracking
-diffgrab check                                   # check all tracked URLs for changes
-diffgrab diff https://example.com                # show structured diff
-diffgrab history https://example.com             # show snapshot history
-diffgrab untrack https://example.com             # stop tracking
-```
-
-### Python
-
-```python
-import asyncio
-from diffgrab import track, check, diff
-
-asyncio.run(track("https://example.com", interval_hours=12))
-results = asyncio.run(check())  # list[DiffResult]
-d = asyncio.run(diff("https://example.com"))  # DiffResult with .unified_diff, .changed_sections
-```
-
-### MCP
-
-Server: `diffgrab-mcp` (stdio transport)
-Tools: `track_url`, `check_changes`, `get_diff`, `get_history`, `untrack_url`
-
-## API Reference
-
-### Module-Level Functions (`diffgrab`)
-
-These are convenience wrappers that create a `DiffTracker`, perform one operation, and close. All are async.
-
-#### `track(url, interval_hours=24, *, db_path="")`
-
-Register a URL for change tracking. Takes an initial snapshot via markgrab.
-
-- **Parameters**:
-  - `url` (`str`): The URL to track.
-  - `interval_hours` (`int`, default `24`): Check interval in hours.
-  - `db_path` (`str`, keyword-only, default `""`): Custom database path. Empty string uses the default path.
-- **Returns**: `str` — Status message (e.g. `"Now tracking: https://example.com (interval: 24h, initial snapshot: 542 words)"`).
-
-#### `check(url=None, *, db_path="")`
-
-Check tracked URLs for changes. Fetches current content, compares against latest stored snapshot.
-
-- **Parameters**:
-  - `url` (`str | None`, default `None`): Specific URL to check, or `None` for all tracked URLs.
-  - `db_path` (`str`, keyword-only, default `""`): Custom database path.
-- **Returns**: `list[DiffResult]` — One result per checked URL.
-
-#### `diff(url, before_id=None, after_id=None, *, db_path="")`
-
-Get structured diff between two snapshots of a URL.
-
-- **Parameters**:
-  - `url` (`str`): The URL to diff.
-  - `before_id` (`int | None`, default `None`): Database ID of the older snapshot. If `None`, uses the second most recent.
-  - `after_id` (`int | None`, default `None`): Database ID of the newer snapshot. If `None`, uses the most recent.
-  - `db_path` (`str`, keyword-only, default `""`): Custom database path.
-- **Returns**: `DiffResult` — Structured diff with unified diff text, changed sections, line counts.
-
-#### `history(url, count=10, *, db_path="")`
-
-Get snapshot history for a URL.
-
-- **Parameters**:
-  - `url` (`str`): The URL to get history for.
-  - `count` (`int`, default `10`): Maximum number of snapshots to return.
-  - `db_path` (`str`, keyword-only, default `""`): Custom database path.
-- **Returns**: `list[dict]` — Snapshot metadata dicts with keys: `id`, `url`, `content_hash`, `title`, `word_count`, `captured_at`. Newest first. Does not include full markdown content.
-
-#### `untrack(url, *, db_path="")`
-
-Remove a URL from tracking and delete all its stored snapshots.
-
-- **Parameters**:
-  - `url` (`str`): The URL to untrack.
-  - `db_path` (`str`, keyword-only, default `""`): Custom database path.
-- **Returns**: `str` — Status message.
-
----
-
-### `DiffTracker` class (`diffgrab.tracker`)
-
-Main orchestrator for tracking web page changes. Manages the database and markgrab fetching.
-
-#### `DiffTracker(db_path="~/.local/share/diffgrab/diffgrab.db")`
-
-- **Parameters**:
-  - `db_path` (`str`, default `"~/.local/share/diffgrab/diffgrab.db"`): Path to the SQLite database file. Parent directories are created automatically.
-
-#### `async DiffTracker.track(url, interval_hours=24) -> str`
-
-Register URL for tracking and take initial snapshot.
-
-- **Parameters**:
-  - `url` (`str`): The URL to track.
-  - `interval_hours` (`int`, default `24`): How often to check for changes in hours.
-- **Returns**: `str` — Status message. Returns `"Already tracking: {url}"` if URL is already registered.
-- **Behavior**: Calls `markgrab.extract(url)` for the initial snapshot. If fetch fails, tracking is still registered but no snapshot is stored.
-
-#### `async DiffTracker.check(url=None) -> list[DiffResult]`
-
-Check tracked URLs for changes.
-
-- **Parameters**:
-  - `url` (`str | None`, default `None`): Specific URL to check, or `None` for all tracked URLs.
-- **Returns**: `list[DiffResult]` — One result per checked URL.
-- **Behavior**: For each URL, fetches current content via markgrab, computes SHA-256 hash, compares with latest stored snapshot. If hash differs, stores new snapshot and returns `DiffResult` with `changed=True` and full diff details.
-
-#### `async DiffTracker.diff(url, before_id=None, after_id=None) -> DiffResult`
-
-Get structured diff between two snapshots.
-
-- **Parameters**:
-  - `url` (`str`): The URL to diff.
-  - `before_id` (`int | None`, default `None`): Database ID of the older snapshot.
-  - `after_id` (`int | None`, default `None`): Database ID of the newer snapshot.
-- **Returns**: `DiffResult` — If both IDs are `None`, uses the two most recent snapshots for the URL.
-
-#### `async DiffTracker.history(url, count=10) -> list[dict]`
-
-Get snapshot history for a URL.
-
-- **Parameters**:
-  - `url` (`str`): The URL to get history for.
-  - `count` (`int`, default `10`): Maximum number of snapshots.
-- **Returns**: `list[dict]` — Metadata dicts (keys: `id`, `url`, `content_hash`, `title`, `word_count`, `captured_at`). Newest first.
-
-#### `async DiffTracker.untrack(url) -> str`
-
-Remove URL from tracking and delete all its snapshots.
-
-- **Parameters**:
-  - `url` (`str`): The URL to untrack.
-- **Returns**: `str` — `"Untracked: {url}"` or `"URL was not being tracked: {url}"`.
-
-#### `async DiffTracker.close() -> None`
-
-Close the database connection. Must be called when done to release the SQLite file lock.
-
----
-
-### `DiffResult` dataclass (`diffgrab.differ`)
-
-Structured result of comparing two snapshots.
-
-#### Fields
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | `str` | (required) | The URL that was compared |
-| `changed` | `bool` | (required) | Whether content changed between snapshots |
-| `added_lines` | `int` | `0` | Number of added lines in the unified diff |
-| `removed_lines` | `int` | `0` | Number of removed lines in the unified diff |
-| `changed_sections` | `list[str]` | `[]` | Markdown heading names of sections that changed |
-| `unified_diff` | `str` | `""` | Full unified diff text |
-| `summary` | `str` | `""` | Human-readable summary (e.g. "12 lines added, 3 lines removed in sections: News, FAQ.") |
-| `before_snapshot_id` | `int | None` | `None` | Database ID of the older snapshot |
-| `after_snapshot_id` | `int | None` | `None` | Database ID of the newer snapshot |
-| `before_timestamp` | `str` | `""` | ISO timestamp of the older snapshot |
-| `after_timestamp` | `str` | `""` | ISO timestamp of the newer snapshot |
-
----
-
-### `compute_diff()` function (`diffgrab.differ`)
-
-#### `compute_diff(before_text, after_text, url="", before_snapshot_id=None, after_snapshot_id=None, before_timestamp="", after_timestamp="")`
-
-Compute structured diff between two markdown texts.
-
-- **Parameters**:
-  - `before_text` (`str`): The older markdown content.
-  - `after_text` (`str`): The newer markdown content.
-  - `url` (`str`, default `""`): The URL being compared (for display).
-  - `before_snapshot_id` (`int | None`, default `None`): Database ID of the older snapshot.
-  - `after_snapshot_id` (`int | None`, default `None`): Database ID of the newer snapshot.
-  - `before_timestamp` (`str`, default `""`): Timestamp string for the older snapshot.
-  - `after_timestamp` (`str`, default `""`): Timestamp string for the newer snapshot.
-- **Returns**: `DiffResult` — Full diff details including unified diff, line counts, changed sections, and summary.
-- **Behavior**: Uses `difflib.unified_diff` internally. Section analysis splits text by ATX-style markdown headings (`# Heading`) and compares per-section content.
-
----
-
-### `Database` class (`diffgrab.db`)
-
-SQLite storage layer. Uses WAL journal mode and foreign keys.
-
-#### `Database(db_path="~/.local/share/diffgrab/diffgrab.db")`
-
-- **Parameters**:
-  - `db_path` (`str`, default `"~/.local/share/diffgrab/diffgrab.db"`): Path to the SQLite database. Parent directories created automatically. Connection is lazily initialized on first use.
-
-#### `Database.add_tracked_url(url, interval_hours=24) -> int`
-
-Add a URL to tracking. Uses `INSERT OR IGNORE`.
-
-- **Parameters**: `url` (`str`), `interval_hours` (`int`, default `24`).
-- **Returns**: `int` — Row ID.
-
-#### `Database.get_tracked_url(url) -> dict | None`
-
-Get a single tracked URL record.
-
-- **Parameters**: `url` (`str`).
-- **Returns**: `dict | None` — Keys: `id`, `url`, `interval_hours`, `created_at`, `last_checked_at`.
-
-#### `Database.get_all_tracked_urls() -> list[dict]`
-
-Get all tracked URLs, ordered by `created_at`.
-
-- **Returns**: `list[dict]` — Same keys as `get_tracked_url`.
-
-#### `Database.update_last_checked(url) -> None`
-
-Update the `last_checked_at` timestamp to `CURRENT_TIMESTAMP`.
-
-#### `Database.remove_tracked_url(url) -> bool`
-
-Remove a URL from tracking and delete all its snapshots.
-
-- **Returns**: `bool` — `True` if a row was deleted.
-
-#### `Database.add_snapshot(url, content_hash, markdown, title="", word_count=0) -> int`
-
-Store a new snapshot.
-
-- **Parameters**: `url` (`str`), `content_hash` (`str`), `markdown` (`str`), `title` (`str`, default `""`), `word_count` (`int`, default `0`).
-- **Returns**: `int` — Row ID.
-
-#### `Database.get_latest_snapshot(url) -> dict | None`
-
-Get the most recent snapshot for a URL.
-
-- **Returns**: `dict | None` — Keys: `id`, `url`, `content_hash`, `markdown`, `title`, `word_count`, `captured_at`.
-
-#### `Database.get_snapshot_by_id(snapshot_id) -> dict | None`
-
-Get a snapshot by its database ID.
-
-- **Parameters**: `snapshot_id` (`int`).
-- **Returns**: `dict | None`.
-
-#### `Database.get_snapshots(url, count=10) -> list[dict]`
-
-Get recent snapshots for a URL, newest first.
-
-- **Parameters**: `url` (`str`), `count` (`int`, default `10`).
-- **Returns**: `list[dict]`.
-
-#### `Database.get_snapshot_pair(url) -> tuple[dict | None, dict | None]`
-
-Get the two most recent snapshots as `(older, newer)`.
-
-- **Returns**: `tuple[dict | None, dict | None]` — `(None, None)` if no snapshots, `(None, newest)` if only one.
-
-#### `Database.close() -> None`
-
-Close the database connection.
-
----
-
-### Visual Diff Module (`diffgrab.visual`)
-
-Optional module for screenshot-based visual comparison. Requires `diffgrab[visual]` (snapgrab) and optionally Pillow for pixel comparison.
-
-#### `VisualDiffResult` dataclass
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | `str` | (required) | The URL compared |
-| `changed` | `bool` | (required) | Whether visual change was detected |
-| `before_path` | `str` | `""` | Path to the before screenshot |
-| `after_path` | `str` | `""` | Path to the after screenshot |
-| `diff_path` | `str` | `""` | Path to the diff image (only if changed) |
-| `pixel_change_ratio` | `float` | `0.0` | Ratio of changed pixels (0.0 to 1.0) |
-| `error` | `str` | `""` | Error message if something failed |
-
-#### `is_available() -> bool`
-
-Check if snapgrab is installed. Returns `True` if visual diffs can be performed.
-
-#### `async capture_screenshot(url, output_dir="/tmp/diffgrab") -> str`
-
-Capture a full-page screenshot of a URL using snapgrab.
-
-- **Parameters**:
-  - `url` (`str`): The URL to capture.
-  - `output_dir` (`str`, default `"/tmp/diffgrab"`): Directory to store the screenshot file.
-- **Returns**: `str` — Absolute path to the saved screenshot file.
-- **Raises**: `ImportError` if snapgrab is not installed.
-
-#### `compute_pixel_diff(before_path, after_path, output_path="") -> tuple[bool, float, str]`
-
-Compare two screenshots pixel-by-pixel using Pillow.
-
-- **Parameters**:
-  - `before_path` (`str`): Path to the before screenshot image.
-  - `after_path` (`str`): Path to the after screenshot image.
-  - `output_path` (`str`, default `""`): Optional path to save the diff image.
-- **Returns**: `tuple[bool, float, str]` — `(changed, pixel_change_ratio, diff_path)`.
-  - `changed` is `True` if more than 0.1% of pixels differ.
-  - `pixel_change_ratio` is the fraction of changed pixels (0.0 to 1.0).
-  - `diff_path` is the saved diff image path (empty if not saved or not changed).
-- **Raises**: `ImportError` if Pillow is not installed.
-- **Behavior**: Resizes images to match dimensions if they differ. Uses `PIL.ImageChops.difference` for comparison.
-
-#### `async visual_diff(url, before_path=None, after_path=None, output_dir="/tmp/diffgrab") -> VisualDiffResult`
-
-Perform visual diff between two screenshots of a URL.
-
-- **Parameters**:
-  - `url` (`str`): The URL being compared.
-  - `before_path` (`str | None`, default `None`): Path to the before screenshot. If `None`, no before comparison is available.
-  - `after_path` (`str | None`, default `None`): Path to the after screenshot. If `None`, captures a new screenshot.
-  - `output_dir` (`str`, default `"/tmp/diffgrab"`): Directory for screenshots and diff images.
-- **Returns**: `VisualDiffResult` — Comparison details. If snapgrab is not installed, returns result with `error` set.
-
----
-
-### MCP Server (`diffgrab.mcp_server`)
-
-FastMCP server exposing 5 tools for web page change tracking. Entry point: `diffgrab-mcp` command.
-
-#### MCP Tools
-
-| Tool | Parameters | Returns |
-|------|-----------|---------|
-| `track_url` | `url: str`, `interval_hours: int = 24` | Status message string |
-| `check_changes` | `url: str | None = None` | JSON array of change results |
-| `get_diff` | `url: str`, `before_id: int | None = None`, `after_id: int | None = None` | JSON object with diff details (unified_diff truncated to 2000 chars) |
-| `get_history` | `url: str`, `count: int = 10` | JSON array of snapshot metadata |
-| `untrack_url` | `url: str` | Status message string |
-
----
-
-### CLI Commands (`diffgrab.__main__`)
-
-Entry point: `diffgrab` command. Requires `diffgrab[cli]` (click + rich).
-
-| Command | Arguments / Options | Description |
-|---------|-------------------|-------------|
-| `diffgrab track <url>` | `--interval INT` (default 24), `--db PATH` | Register URL, take initial snapshot |
-| `diffgrab check [url]` | `--db PATH` | Check all (or one) tracked URLs for changes |
-| `diffgrab diff <url>` | `--before INT`, `--after INT`, `--db PATH` | Show unified diff between two snapshots |
-| `diffgrab history <url>` | `--count INT` (default 10), `--db PATH` | Show snapshot history as a rich table |
-| `diffgrab untrack <url>` | `--db PATH` | Remove URL from tracking |
-
-All commands accept `--db` to override the default database path.
-
-## Configuration
-
-### Database Location
-
-Default: `~/.local/share/diffgrab/diffgrab.db`
-
-Override via:
-- CLI: `--db /path/to/custom.db` on any command
-- Python: `db_path="/path/to/custom.db"` parameter on any function or `DiffTracker(db_path="...")`
-
-The database is auto-created on first use with WAL journal mode and foreign keys enabled.
-
-### Database Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS tracked_urls (
-    id INTEGER PRIMARY KEY,
-    url TEXT UNIQUE NOT NULL,
-    interval_hours INTEGER DEFAULT 24,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    last_checked_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS snapshots (
-    id INTEGER PRIMARY KEY,
-    url TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    markdown TEXT NOT NULL,
-    title TEXT DEFAULT '',
-    word_count INTEGER DEFAULT 0,
-    captured_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (url) REFERENCES tracked_urls(url)
-);
-```
-
-### Change Detection Thresholds
-
-- **Text diff**: Any SHA-256 hash difference triggers `changed=True`.
-- **Visual diff**: Pixel change ratio > 0.001 (0.1%) triggers `changed=True`.
-
-### MCP Server Configuration
-
-Add to your MCP client config (e.g. Claude Desktop):
-
-```json
-{
-  "mcpServers": {
-    "diffgrab": {
-      "command": "diffgrab-mcp",
-      "transport": "stdio"
-    }
-  }
-}
-```
-
-Or with uvx (no install needed):
-
-```json
-{
-  "mcpServers": {
-    "diffgrab": {
-      "command": "uvx",
-      "args": ["--from", "diffgrab[mcp]", "diffgrab-mcp"],
-      "transport": "stdio"
-    }
-  }
-}
-```
-
+Requires: Python >= 3.11. Core deps: markgrab >= 0.1.2, httpx >= 0.28.
+## Module-Level Functions (`diffgrab`)
+Async convenience wrappers -- create DiffTracker, run one op, close. All accept `*, db_path: str = ""`.
+### `async track(url, interval_hours=24, *, db_path="") -> str`
+Register URL for tracking, take initial snapshot via markgrab.
+### `async check(url=None, *, db_path="") -> list[DiffResult]`
+Check one (`url=str`) or all (`url=None`) tracked URLs for changes.
+### `async diff(url, before_id=None, after_id=None, *, db_path="") -> DiffResult`
+Structured diff between two snapshots. `None` IDs = two most recent.
+### `async history(url, count=10, *, db_path="") -> list[dict]`
+Snapshot metadata (keys: `id`, `url`, `content_hash`, `title`, `word_count`, `captured_at`). Newest first.
+### `async untrack(url, *, db_path="") -> str`
+Remove URL from tracking + delete all snapshots.
+## DiffTracker (`diffgrab.tracker`)
+`DiffTracker(db_path="~/.local/share/diffgrab/diffgrab.db")` -- main orchestrator.
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `async track(url, interval_hours=24)` | `str` | Returns "Already tracking: {url}" if exists |
+| `async check(url=None)` | `list[DiffResult]` | SHA-256 hash comparison, stores new snapshot on change |
+| `async diff(url, before_id=None, after_id=None)` | `DiffResult` | None IDs = two most recent |
+| `async history(url, count=10)` | `list[dict]` | Same keys as module-level history |
+| `async untrack(url)` | `str` | Deletes all snapshots for URL |
+| `async close()` | `None` | Release SQLite file lock |
+## DiffResult (`diffgrab.differ`)
+| Field | Type | Default |
+|-------|------|---------|
+| `url` | `str` | required |
+| `changed` | `bool` | required |
+| `added_lines` / `removed_lines` | `int` | `0` |
+| `changed_sections` | `list[str]` | `[]` -- markdown heading names |
+| `unified_diff` | `str` | `""` |
+| `summary` | `str` | `""` -- e.g. "12 lines added, 3 removed in sections: News, FAQ." |
+| `before_snapshot_id` / `after_snapshot_id` | `int | None` | `None` |
+| `before_timestamp` / `after_timestamp` | `str` | `""` |
+## compute_diff (`diffgrab.differ`)
+`compute_diff(before_text, after_text, url="", before_snapshot_id=None, after_snapshot_id=None, before_timestamp="", after_timestamp="") -> DiffResult`
+Direct text-to-text diff using `difflib.unified_diff`. Section analysis splits by ATX headings.
+## Database (`diffgrab.db`)
+`Database(db_path="~/.local/share/diffgrab/diffgrab.db")` -- SQLite, WAL mode, foreign keys. Lazy init.
+| Method | Returns |
+|--------|---------|
+| `add_tracked_url(url, interval_hours=24)` | `int` (row ID) |
+| `get_tracked_url(url)` | `dict | None` (keys: id, url, interval_hours, created_at, last_checked_at) |
+| `get_all_tracked_urls()` | `list[dict]` |
+| `update_last_checked(url)` | `None` |
+| `remove_tracked_url(url)` | `bool` |
+| `add_snapshot(url, content_hash, markdown, title="", word_count=0)` | `int` (row ID) |
+| `get_latest_snapshot(url)` | `dict | None` (keys: id, url, content_hash, markdown, title, word_count, captured_at) |
+| `get_snapshot_by_id(snapshot_id)` | `dict | None` |
+| `get_snapshots(url, count=10)` | `list[dict]` (newest first) |
+| `get_snapshot_pair(url)` | `tuple[dict | None, dict | None]` (older, newer) |
+| `close()` | `None` |
+## Visual Diff (`diffgrab.visual`)
+Requires `diffgrab[visual]` (snapgrab). Pillow optional for pixel comparison.
+### VisualDiffResult
+| Field | Type | Default |
+|-------|------|---------|
+| `url` | `str` | required |
+| `changed` | `bool` | required |
+| `before_path` / `after_path` / `diff_path` | `str` | `""` |
+| `pixel_change_ratio` | `float` | `0.0` (0.0-1.0) |
+| `error` | `str` | `""` |
+### Functions
+`is_available() -> bool` -- check if snapgrab installed.
+`async capture_screenshot(url, output_dir="/tmp/diffgrab") -> str` -- full-page screenshot path.
+`compute_pixel_diff(before_path, after_path, output_path="") -> tuple[bool, float, str]` -- (changed, ratio, diff_path). Threshold: 0.1% pixels.
+`async visual_diff(url, before_path=None, after_path=None, output_dir="/tmp/diffgrab") -> VisualDiffResult` -- end-to-end visual comparison.
+## MCP Server (`diffgrab.mcp_server`)
+Entry point: `diffgrab-mcp` (stdio). 5 tools:
+| Tool | Params | Returns |
+|------|--------|---------|
+| `track_url` | `url: str, interval_hours: int = 24` | status string |
+| `check_changes` | `url: str | None = None` | JSON array |
+| `get_diff` | `url: str, before_id: int? = None, after_id: int? = None` | JSON (unified_diff truncated 2000 chars) |
+| `get_history` | `url: str, count: int = 10` | JSON array |
+| `untrack_url` | `url: str` | status string |
+Config: `{"mcpServers": {"diffgrab": {"command": "diffgrab-mcp", "transport": "stdio"}}}` or `uvx --from diffgrab[mcp] diffgrab-mcp`.
+## CLI (`diffgrab[cli]`)
+| Command | Key Options |
+|---------|-------------|
+| `diffgrab track <url>` | `--interval INT` (default 24), `--db PATH` |
+| `diffgrab check [url]` | `--db PATH` |
+| `diffgrab diff <url>` | `--before INT`, `--after INT`, `--db PATH` |
+| `diffgrab history <url>` | `--count INT` (default 10), `--db PATH` |
+| `diffgrab untrack <url>` | `--db PATH` |
 ## Examples
-
-### Track and monitor a news page
-
+### Track and check
 ```python
-import asyncio
-from diffgrab import track, check, diff, history
-
-async def monitor_news():
-    # Register URL with 6-hour check interval
-    msg = await track("https://news.ycombinator.com", interval_hours=6)
-    print(msg)
-    # "Now tracking: https://news.ycombinator.com (interval: 6h, initial snapshot: 1234 words)"
-
-    # Later: check for changes
-    results = await check()
-    for r in results:
-        if r.changed:
-            print(f"Changes found: +{r.added_lines} / -{r.removed_lines} lines")
-            print(f"Sections changed: {r.changed_sections}")
-            print(r.unified_diff[:500])
-        else:
-            print(f"No changes: {r.summary}")
-
-asyncio.run(monitor_news())
+from diffgrab import track, check
+await track("https://news.ycombinator.com", interval_hours=6)
+results = await check()
+for r in results:
+    if r.changed:
+        print(f"+{r.added_lines}/-{r.removed_lines} in {r.changed_sections}")
 ```
-
-### Compare specific snapshots
-
+### DiffTracker with custom DB
 ```python
-import asyncio
-from diffgrab import history, diff
-
-async def compare_versions():
-    url = "https://docs.python.org/3/whatsnew/3.12.html"
-
-    # List available snapshots
-    snaps = await history(url, count=5)
-    for s in snaps:
-        print(f"ID={s['id']}  {s['captured_at']}  {s['word_count']} words  {s['title']}")
-
-    # Compare two specific snapshots
-    if len(snaps) >= 2:
-        older = snaps[-1]  # oldest in the returned list
-        newer = snaps[0]   # newest
-        result = await diff(url, before_id=older["id"], after_id=newer["id"])
-        print(result.summary)
-        print(result.unified_diff)
-
-asyncio.run(compare_versions())
-```
-
-### Use DiffTracker directly with custom database
-
-```python
-import asyncio
 from diffgrab import DiffTracker
-
-async def custom_workflow():
-    tracker = DiffTracker(db_path="/tmp/my-monitor.db")
-    try:
-        await tracker.track("https://example.com/api/status", interval_hours=1)
-        await tracker.track("https://example.com/changelog", interval_hours=12)
-
-        # Check all tracked URLs
-        changes = await tracker.check()
-        changed_urls = [r for r in changes if r.changed]
-        print(f"{len(changed_urls)} of {len(changes)} URLs changed")
-
-        # Check a single URL
-        single = await tracker.check("https://example.com/api/status")
-        print(single[0].summary)
-
-        # Get diff for a specific URL
-        d = await tracker.diff("https://example.com/changelog")
-        if d.changed:
-            print(f"Changelog updated: {d.summary}")
-
-        # View history
-        hist = await tracker.history("https://example.com/api/status", count=20)
-        print(f"{len(hist)} snapshots recorded")
-
-        # Stop tracking
-        msg = await tracker.untrack("https://example.com/api/status")
-        print(msg)
-    finally:
-        await tracker.close()
-
-asyncio.run(custom_workflow())
+tracker = DiffTracker(db_path="/tmp/my.db")
+await tracker.track("https://example.com/status", interval_hours=1)
+changes = await tracker.check()
+d = await tracker.diff("https://example.com/status")
+await tracker.close()
 ```
-
-### Visual diff with snapgrab
-
-```python
-import asyncio
-from diffgrab.visual import is_available, visual_diff, capture_screenshot
-
-async def visual_comparison():
-    if not is_available():
-        print("Install snapgrab: pip install 'diffgrab[visual]'")
-        return
-
-    url = "https://example.com"
-
-    # Capture a baseline screenshot
-    before = await capture_screenshot(url, output_dir="/tmp/diffgrab/baseline")
-    print(f"Before screenshot: {before}")
-
-    # Later: compare with current state
-    result = await visual_diff(url, before_path=before, output_dir="/tmp/diffgrab/current")
-    print(f"Changed: {result.changed}")
-    print(f"Pixel change ratio: {result.pixel_change_ratio:.4f}")
-    if result.diff_path:
-        print(f"Diff image saved: {result.diff_path}")
-
-asyncio.run(visual_comparison())
-```
-
-### Compute diff directly from text
-
+### Direct text diff
 ```python
 from diffgrab.differ import compute_diff
-
-before = "# News\n\nHeadline A\nHeadline B\n\n# Sports\n\nTeam X won."
-after = "# News\n\nHeadline A\nHeadline C\n\n# Sports\n\nTeam X won.\n\n# Weather\n\nSunny."
-
-result = compute_diff(before, after, url="https://example.com")
-
-print(result.changed)           # True
-print(result.added_lines)       # 4
-print(result.removed_lines)     # 1
-print(result.changed_sections)  # ['News', 'Weather']
-print(result.summary)           # "4 lines added, 1 lines removed in sections: News, Weather."
-print(result.unified_diff)      # full unified diff text
+r = compute_diff("# A\nold\n", "# A\nnew\n", url="x")
+print(r.changed, r.added_lines, r.changed_sections)  # True 1 ['A']
 ```
-
-### CLI workflow
-
-```bash
-# Track multiple pages
-diffgrab track https://example.com --interval 12
-diffgrab track https://docs.python.org/3/ --interval 48
-
-# Check all for changes
-diffgrab check
-
-# Check one specific URL
-diffgrab check https://example.com
-
-# View snapshot history
-diffgrab history https://example.com --count 20
-
-# Compare specific snapshots (use IDs from history output)
-diffgrab diff https://example.com --before 3 --after 7
-
-# Use a custom database
-diffgrab track https://example.com --db /tmp/test.db
-diffgrab check --db /tmp/test.db
-
-# Stop tracking
-diffgrab untrack https://example.com
-```
-
 ## Links
-
-- Docs: https://github.com/QuartzUnit/diffgrab
-- PyPI: https://pypi.org/project/diffgrab/
-- Source: https://github.com/QuartzUnit/diffgrab
+- [GitHub](https://github.com/QuartzUnit/diffgrab) | [PyPI](https://pypi.org/project/diffgrab/)
