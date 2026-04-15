@@ -32,6 +32,9 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
 [project.urls]
 Homepage = "https://github.com/QuartzUnit/diffgrab"
 Repository = "https://github.com/QuartzUnit/diffgrab"
+Issues = "https://github.com/QuartzUnit/diffgrab/issues"
+Documentation = "https://github.com/QuartzUnit/diffgrab#readme"
+Changelog = "https://github.com/QuartzUnit/diffgrab/releases"
 
 [project.scripts]
 diffgrab = "diffgrab.__main__:main"

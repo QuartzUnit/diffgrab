@@ -218,3 +218,8 @@ tracker = DiffTracker(db_path="/path/to/custom.db")
 [MIT](LICENSE)
 
 <!-- mcp-name: io.github.QuartzUnit/diffgrab -->
+
+
+---
+
+<sub>Part of the [QuartzUnit](https://github.com/QuartzUnit) ecosystem — composable Python libraries for data collection, extraction, search, and AI agent safety.</sub>
